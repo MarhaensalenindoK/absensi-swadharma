@@ -4,6 +4,12 @@ import re
 import os
 from dotenv import load_dotenv
 import json
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 load_dotenv()
 
@@ -25,7 +31,7 @@ class SwadharmaLogin:
         """
         Mengambil halaman login untuk mendapatkan logintoken dan MoodleSession cookie.
         """
-        print("Mencoba mengambil halaman login...")
+        logging.info("Mencoba mengambil halaman login...")
         try:
             response = self.session.get(self.LOGIN_URL)
             response.raise_for_status()
@@ -36,20 +42,22 @@ class SwadharmaLogin:
             )
             if logintoken_input:
                 self.logintoken = logintoken_input["value"]
-                print(f"logintoken berhasil diambil: {self.logintoken}")
+                logging.info(f"logintoken berhasil diambil: {self.logintoken}")
             else:
                 raise ValueError("logintoken tidak ditemukan di halaman login.")
 
-            print(f"MoodleSession cookie secara otomatis disimpan oleh session.")
+            logging.info(f"MoodleSession cookie secara otomatis disimpan oleh session.")
             if "MoodleSession" in self.session.cookies:
-                print(f"Current MoodleSession: {self.session.cookies['MoodleSession']}")
+                logging.info(
+                    f"Current MoodleSession: {self.session.cookies['MoodleSession']}"
+                )
 
             return True
         except requests.exceptions.RequestException as e:
-            print(f"Gagal mengambil halaman login: {e}")
+            logging.error(f"Gagal mengambil halaman login: {e}")
             return False
         except ValueError as e:
-            print(f"Error: {e}")
+            logging.error(f"Error: {e}")
             return False
 
     def perform_login(self):
@@ -58,12 +66,12 @@ class SwadharmaLogin:
         Mengembalikan URL pengalihan jika berhasil, atau None jika gagal.
         """
         if not self.logintoken:
-            print(
+            logging.error(
                 "Error: logintoken belum diambil. Harap panggil fetch_login_page_details() terlebih dahulu."
             )
             return None
 
-        print("Mencoba melakukan login...")
+        logging.info("Mencoba melakukan login...")
         login_data = {
             "logintoken": self.logintoken,
             "username": self.username,
@@ -92,22 +100,26 @@ class SwadharmaLogin:
 
             if redirect_link_tag:
                 full_redirect_url = redirect_link_tag["href"]
-                print(f"Login berhasil, mendeteksi pengalihan ke: {full_redirect_url}")
+                logging.info(
+                    f"Login berhasil, mendeteksi pengalihan ke: {full_redirect_url}"
+                )
                 return full_redirect_url
             else:
-                print("Login gagal atau pengalihan tidak ditemukan. Respon HTML:")
-                print(response.text[:500])
+                logging.error(
+                    "Login gagal atau pengalihan tidak ditemukan. Respon HTML:"
+                )
+                logging.error(response.text[:500])
                 return None
 
         except requests.exceptions.RequestException as e:
-            print(f"Gagal melakukan permintaan login POST: {e}")
+            logging.error(f"Gagal melakukan permintaan login POST: {e}")
             return None
 
     def follow_redirect_and_get_sesskey(self, redirect_url):
         """
         Mengakses URL pengalihan (testsession) untuk mendapatkan sesskey.
         """
-        print(
+        logging.info(
             f"Mengikuti pengalihan dan mencoba mendapatkan sesskey dari: {redirect_url}"
         )
         try:
@@ -117,14 +129,14 @@ class SwadharmaLogin:
 
             if sesskey_match:
                 self.sesskey = sesskey_match.group(1)
-                print(f"sesskey berhasil diambil: {self.sesskey}")
+                logging.info(f"sesskey berhasil diambil: {self.sesskey}")
                 return True
             else:
-                print("sesskey tidak ditemukan di halaman pengalihan.")
+                logging.error("sesskey tidak ditemukan di halaman pengalihan.")
                 return False
 
         except requests.exceptions.RequestException as e:
-            print(f"Gagal mengikuti pengalihan atau mendapatkan sesskey: {e}")
+            logging.error(f"Gagal mengikuti pengalihan atau mendapatkan sesskey: {e}")
             return False
 
     def test_login_status(self):
@@ -132,12 +144,14 @@ class SwadharmaLogin:
         Menguji status login dengan memanggil API core_course_get_recent_courses.
         """
         if not self.sesskey:
-            print(
+            logging.error(
                 "Error: sesskey belum diambil. Harap selesaikan proses login terlebih dahulu."
             )
             return False
 
-        print("Mencoba menguji status login dengan memanggil API kursus terbaru...")
+        logging.info(
+            "Mencoba menguji status login dengan memanggil API kursus terbaru..."
+        )
         api_url = f"{self.SERVICE_URL}?sesskey={self.sesskey}&info=core_course_get_recent_courses"
 
         api_body = [
@@ -164,18 +178,17 @@ class SwadharmaLogin:
             response.raise_for_status()
 
             response_json = response.json()
-            print("Respons API (Kursus Terbaru):")
-            print(json.dumps(response_json, indent=2))
+            logging.info("Respons API (Kursus Terbaru)")
 
             if (
                 response_json
                 and isinstance(response_json, list)
                 and len(response_json) > 0
             ):
-                # KOREKSI PENTING DI SINI:
-                # Periksa apakah 'error' bernilai TRUE (ini berarti ada error)
                 if "error" in response_json[0] and response_json[0]["error"] is True:
-                    print(f"API mengembalikan error: {response_json[0]['error']}")
+                    logging.error(
+                        f"API mengembalikan error: {response_json[0]['error']}"
+                    )
                     return False
                 # Periksa apakah ada 'data' dan 'data' itu sendiri adalah list (daftar kursus)
                 elif (
@@ -183,23 +196,23 @@ class SwadharmaLogin:
                     and isinstance(response_json[0]["data"], list)
                     and len(response_json[0]["data"]) > 0
                 ):
-                    print("Berhasil mengambil daftar kursus terbaru!")
+                    logging.info("Berhasil mengambil daftar kursus terbaru!")
                     return True
                 else:
-                    print(
+                    logging.error(
                         "Respons API tidak sesuai format yang diharapkan atau tidak ada data kursus yang valid."
                     )
                     return False
             else:
-                print("Respons API kosong atau tidak valid.")
+                logging.error("Respons API kosong atau tidak valid.")
                 return False
 
         except requests.exceptions.RequestException as e:
-            print(f"Gagal menguji status login dengan API: {e}")
+            logging.error(f"Gagal menguji status login dengan API: {e}")
             return False
         except json.JSONDecodeError:
-            print("Gagal mengurai respons JSON dari API.")
-            print(f"Respon mentah: {response.text[:500]}")
+            logging.error("Gagal mengurai respons JSON dari API.")
+            logging.error(f"Respon mentah: {response.text[:500]}")
             return False
 
 
@@ -210,10 +223,10 @@ if __name__ == "__main__":
     USERID = os.getenv("SPADA_USERID")
 
     if not all([USERNAME, PASSWORD, USERID]):
-        print(
+        logging.error(
             "Error: Kredensial (USERNAME, PASSWORD, USERID) tidak ditemukan di variabel lingkungan."
         )
-        print(
+        logging.error(
             "Pastikan Anda memiliki file .env di direktori yang sama dengan isian yang benar."
         )
         exit(1)
@@ -223,16 +236,16 @@ if __name__ == "__main__":
     if login_manager.fetch_login_page_details():
         redirect_url = login_manager.perform_login()
         if redirect_url:
-            print(f"Login awal berhasil. URL pengalihan: {redirect_url}")
+            logging.info(f"Login awal berhasil. URL pengalihan: {redirect_url}")
             if login_manager.follow_redirect_and_get_sesskey(redirect_url):
-                print("Berhasil mendapatkan sesskey. Login selesai!")
+                logging.info("Berhasil mendapatkan sesskey. Login selesai!")
                 if login_manager.test_login_status():
-                    print("Verifikasi login berhasil dengan API kursus terbaru!")
+                    logging.info("Verifikasi login berhasil dengan API kursus terbaru!")
                 else:
-                    print("Verifikasi login dengan API kursus terbaru gagal.")
+                    logging.error("Verifikasi login dengan API kursus terbaru gagal.")
             else:
-                print("Gagal mendapatkan sesskey.")
+                logging.error("Gagal mendapatkan sesskey.")
         else:
-            print("Login awal gagal.")
+            logging.error("Login awal gagal.")
     else:
-        print("\nProses pengambilan detail halaman login gagal.")
+        logging.error("\\nProses pengambilan detail halaman login gagal.")
